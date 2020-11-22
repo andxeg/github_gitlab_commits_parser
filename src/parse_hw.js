@@ -13,6 +13,22 @@ const heightWindow      = 1015;
 const widthContentArea  = 1536;
 const heightContentArea = 754;
 
+const chromeOptions = {
+    product: 'chrome',
+//    executablePath: "/usr/bin/google-chrome-stable",
+    executablePath: 'google-chrome-stable',
+    headless: true,
+    ignoreHTTPSErrors: true,
+    dumpio: true,
+    args: [
+        '--no-sandbox',
+        '--headless',
+        '--hide-scrollbars',
+        '--mute-audio',
+        `--window-size=${widthWindow},${heightWindow}`
+    ]
+};
+
 
 function sleep(ms = 0) {
     return new Promise(r => setTimeout(r, ms));
@@ -73,7 +89,10 @@ const getGitUrls = async (page) => {
     return newUrls;
 };
 
-const getStudentsRepos = async (browser) => {
+const getStudentsRepos = async () => {
+    const browser = await puppeteer.launch(chromeOptions);
+    console.log(await browser.version());
+
     const page = await browser.newPage();
     await preparePageForTests(page);
     await page.goto(url, {
@@ -87,7 +106,11 @@ const getStudentsRepos = async (browser) => {
 
     await autoScroll(page);
 
-    return getGitUrls(page);
+    const urls = await getGitUrls(page);
+
+    await browser.close();
+
+    return urls;
 };
 
 const getCommitInfoGitHub = async (browser, commitUrl) => {
@@ -100,7 +123,7 @@ const getCommitInfoGitHub = async (browser, commitUrl) => {
     });
 
     // Get commit time
-    await page.waitForSelector('#js-repo-pjax-container > div.container-xl.clearfix.new-discussion-timeline.px-3.px-md-4.px-lg-5 > div > div.commit.full-commit.mt-0.px-2.pt-2 > div.commit-meta.p-2.d-flex.flex-wrap > div.flex-self-start.no-wrap.mr-md-4.mr-0 > relative-time');
+    await page.waitForSelector('#js-repo-pjax-container > div.container-xl.clearfix.new-discussion-timeline.px-3.px-md-4.px-lg-5 > div > div.commit.full-commit.mt-0.px-2.pt-2 > div.commit-meta.p-2.d-flex.flex-wrap > div.flex-self-start.no-wrap.mr-md-4.mr-0 > relative-time', {visible: true});
     var date = await page.evaluate((selector) => {
         return document.querySelector(selector).getAttribute("title");
     }, '#js-repo-pjax-container > div.container-xl.clearfix.new-discussion-timeline.px-3.px-md-4.px-lg-5 > div > div.commit.full-commit.mt-0.px-2.pt-2 > div.commit-meta.p-2.d-flex.flex-wrap > div.flex-self-start.no-wrap.mr-md-4.mr-0 > relative-time');
@@ -125,6 +148,8 @@ const getCommitInfoGitHub = async (browser, commitUrl) => {
         return results;
 
     }, '#toc > ol > li > a');
+
+    // await page.close();
 
     return {
         files: modFiles,
@@ -188,8 +213,8 @@ const getStudentCommitsGitHub = async (browser, name, baseUrl) => {
                 enable = false;
             } else {
                 enable = true;
-                page = await browser.newPage();
-                await preparePageForTests(page);
+                // page = await browser.newPage();
+                // await preparePageForTests(page);
                 await page.goto(href, {
                     waitUntil: 'networkidle2',
                 });
@@ -226,6 +251,8 @@ const getStudentCommitsGitHub = async (browser, name, baseUrl) => {
 
     console.log("Results for: ", name, ". TOTAL: ", commitsInfo.length + errorCommits, ", SUCCESS: ", commitsInfo.length, ", ERROR: ", errorCommits);
 
+    // await page.close();
+
     return commitsInfo;
 };
 
@@ -240,7 +267,7 @@ const getCommitInfoGitlab = async (browser, commitUrl) => {
     // Get commit time
     // attribute -> data-original-title="Oct 01, 2020 5:52pm GMT+0300"
     // attribute -> datetime="2020-10-01T14:52:53Z"
-    await page.waitForSelector('#content-body > div.container-fluid.container-limited.limit-container-width > div.page-content-header.js-commit-box > div.header-main-content > time');
+    await page.waitForSelector('#content-body > div.container-fluid.container-limited.limit-container-width > div.page-content-header.js-commit-box > div.header-main-content > time', {visible: true});
     var date = await page.evaluate((selector) => {
         return document.querySelector(selector).getAttribute("data-original-title");
     }, '#content-body > div.container-fluid.container-limited.limit-container-width > div.page-content-header.js-commit-box > div.header-main-content > time');
@@ -269,6 +296,7 @@ const getCommitInfoGitlab = async (browser, commitUrl) => {
 
     }, '#content-body > div.container-fluid.container-limited.limit-container-width > div.content-block.oneline-block.files-changed.diff-files-changed.js-diff-files-changed > div > div.commit-stat-summary.dropdown.show > div.dropdown-menu.diff-file-changes.show > div.dropdown-content > ul > li > a');
 
+    // await page.close();
 
     return {
         files: modFiles,
@@ -337,14 +365,21 @@ const getStudentCommitsGitlab = async (browser, name, baseUrl) => {
 
     console.log("Results for: ", name, ". TOTAL: ", commitsInfo.length + errorCommits, ", SUCCESS: ", commitsInfo.length, ", ERROR: ", errorCommits);
 
+    // await page.close();
+
     return commitsInfo;
 };
 
-const getStudentsStatistics = async (browser, students_repos) => {
+const getStudentsStatistics = async (students_repos) => {
     let results = []; // {"name": "Name", "url": "Repo URL", "commits": [{"date": "date_str", "files": ["filename_1", ..., "filename_N"]}, ..., {...}]}
 
     for (const item of students_repos) {
+        const browser = await puppeteer.launch(chromeOptions);
+        console.log(await browser.version());
+
         try {
+            
+
             console.log("Name: ", item.name);
             
             let commits = [];
@@ -368,61 +403,94 @@ const getStudentsStatistics = async (browser, students_repos) => {
             });
         } catch(err) {
             console.log("Error: ", err.message);
-        }        
+        }
+
+        await browser.close();
     }
 
     return results;
 };
 
-const chromeOptions = {
-    product: 'chrome',
-//    executablePath: "/usr/bin/google-chrome-stable",
-    executablePath: 'google-chrome-stable',
-    headless: true,
-    ignoreHTTPSErrors: true,
-    dumpio: true,
-    args: [
-        '--no-sandbox',
-        '--headless',
-        '--hide-scrollbars',
-        '--mute-audio',
-        `--window-size=${widthWindow},${heightWindow}`
-    ]
-};
-
 async function run () {
-    const browser = await puppeteer.launch(chromeOptions);
-    console.log(await browser.version());
-
     // Get repo urls
-    const studentsRepos = await getStudentsRepos(browser);
+    const studentsRepos = await getStudentsRepos();
     console.log("Number of students: " + studentsRepos.length);
     console.log(studentsRepos);
 
     // NOTE!
     // remove after test
-    // const debugStudentsRepos = [
-    //     // {
-    //     //     name: 'Стрельников Алексей Олегович',
-    //     //     url: 'https://git.cs.msu.ru/s02180538/pythonprac.git'
-    //     // },
-    //     // {
-    //     //     name: 'Ларин Андрей Викторович',
-    //     //     url: 'https://github.com/hakenlaken/pythonprac.git'
-    //     // },
-    //     {
-    //         name: 'Ветрова Екатерина Александровна',
-    //         url: 'https://git.cs.msu.ru/s02180389/pythonprac'
-    //     }
-    // ];
+    const debugStudentsRepos = [
+        {
+            name: 'Бодров Антон Олегович',
+            url: 'https://github.com/jan2801/pythonprac.git'
+        },
+        {
+            name: 'Стрельников Алексей Олегович',
+            url: 'https://git.cs.msu.ru/s02180538/pythonprac.git'
+        },
+        {
+            name: 'Коваленко Анастасия Павловна',
+            url: 'https://git.cs.msu.ru/s02180445/pythonprac'
+        },
+        {
+            name: 'Карпенков Роман Андреевич',
+            url: 'https://git.cs.msu.ru/s90180038/pythonprac'
+        },
+        {
+            name: 'Александров Алексей Владимирович',
+            url: 'https://git.cs.msu.ru/s02180607/pythonprac'
+        },
+        {
+            name: 'Любимов Артем Максимович',
+            url: 'https://git.cs.msu.ru/s02180666/pyrhonprac'
+        },
+        {
+            name: 'Танкаев Иван Рустамович',
+            url: 'https://github.com/TheGhost8/pythonprac'
+        },
+        {
+            name: 'Литвинюк Сергей Павлович',
+            url: 'https://git.cs.msu.ru/s02180027/pythonprac'
+        },
+        {
+            name: 'Чернышов Михаил Михайлович',
+            url: 'https://github.com/Disfavour/pythonprac'
+        },
+        {
+            name: 'Плужникова Дарья Руслановна',
+            url: 'https://git.cs.msu.ru/s02180501/pythonprac'
+        },
+        {
+            name: 'Ветрова Екатерина Александровна',
+            url: 'https://git.cs.msu.ru/s02180389/pythonprac'
+        },
+        {
+            name: 'Беляева Ольга Константиновна',
+            url: 'https://git.cs.msu.ru/s02180374/pythonprac.git'
+        },
+        {
+            name: 'Ларин Андрей Викторович',
+            url: 'https://github.com/hakenlaken/pythonprac.git'
+        },
+        {
+            name: 'Абрамов Алексей Владимирович',
+            url: 'https://git.cs.msu.ru/s02180360/pythonprac'
+        },
+        {
+            name: 'Костин Родион Николаевич',
+            url: 'https://git.cs.msu.ru/s02170133/pythonprac'
+        },
+        {
+            name: 'Коблова Елизавета Сергеевна',
+            url: 'https://git.cs.msu.ru/s02170124/pythonprac'
+        },
+    ];
 
-    // console.log(debugStudentsRepos);
+    console.log(debugStudentsRepos);
 
     // Get statistics
-    const studentsStat = await getStudentsStatistics(browser, studentsRepos);
+    const studentsStat = await getStudentsStatistics(debugStudentsRepos);
     console.log(JSON.stringify(studentsStat));
-
-    await browser.close();
 }
 
 run();
